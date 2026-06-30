@@ -358,48 +358,50 @@ PWAS tutorial</h1>
 </div>
 
 
-<p>The thing is….</p>
+<p>This tutorial will guide you through installing two conda/mamba
+environments, where you will perform standard quality control of GWAS
+results and perform a proteome-wide association study (PWAS).</p>
 <div id="set-up-environments-fusion_final-and-ldsc" class="section level1">
 <h1>1) Set up environments (<code>fusion_final</code> and
 <code>ldsc</code>)</h1>
 <div id="create-fusion_final-environment" class="section level2">
 <h2>Create <code>fusion_final</code> environment</h2>
 <pre class="bash"><code>
-# Create an rTWAS folder and enter it
-mkdir -p ~/rtwas 
-cd ~/rtwas
+# Create an pwas folder and enter it
+mkdir -p ~/pwas 
+cd ~/pwas
 
 # Download yml file for conda
-wget https://raw.githubusercontent.com/rodrigoduarte88/neuro_rTWAS/main/fusion_final_environment.yml 
+wget https://raw.githubusercontent.com/rodrigoduarte88/kings_unicamp_pwas/refs/heads/main/fusion_final_environment.yml
 
 # Create conda environment called fusion_final
-conda env create -f fusion_final_environment.yml
+mamba env create -f fusion_final_environment.yml
+
+# Start environment. Note: conda and mamba are sister commands, but I typically just use mamba for installing new commands, and conda for activating them.
+conda activate fusion_final
 
 # Change name of some libraries for conda
-cd ~/miniconda3/envs/fusion_final/lib 
+cd $CONDA_PREFIX/lib
 mv liblapack.so libRlapack.so 
 mv libblas.so libRblas.so
 
-# Start R and manually install plink2R library. First, activate environment
-conda activate fusion_final
-
-# Then start R
+# Then start R and manually install plink2R library. First, activate environment
 R
 
 # Then install plink2R
-devtools::install_github(&quot;carbocation/plink2R/plink2R&quot;, ref=&quot;carbocation-permit-r361&quot;)
+devtools::install_github(&quot;carbocation/plink2R/plink2R&quot;, ref=&quot;carbocation-permit-r361&quot;, upgrade = &quot;never&quot;)
 
 # install mystical libraries
-install.packages(c(&quot;optparse&quot;, &quot;doMC&quot;))
+install.packages(c(&quot;optparse&quot;, &quot;doMC&quot;), repos = &quot;https://cloud.r-project.org&quot;)
 
 # quit R
 quit(&quot;no&quot;)</code></pre>
 </div>
 <div id="create-ldsc-environment" class="section level2">
 <h2>Create <code>ldsc</code> environment</h2>
-<pre class="bash"><code>cd ~/rtwas
+<pre class="bash"><code>cd ~/pwas
 
-wget https://www.dropbox.com/s/9cvovht5hbp5mho/ldsc_environment.yml
+wget https://raw.githubusercontent.com/rodrigoduarte88/kings_unicamp_pwas/refs/heads/main/ldsc_environment.yml
 
 conda env create -f ldsc_environment.yml
 </code></pre>
@@ -409,13 +411,13 @@ conda env create -f ldsc_environment.yml
 <h1>2) Download required files and decompress</h1>
 <pre class="bash"><code>
 # Download GWAS summary statistics from the PGC website (European subset, schizophrenia)
-cd ~/rtwas
+cd ~/pwas
 wget https://figshare.com/ndownloader/files/34517828 -O schizophrenia_EUR.tsv.gz
 
 # Download reference panel (1000 Genomes, European subset)
 wget https://www.dropbox.com/s/oxt4sbryxxjpg1d/1000G_ref_panel.tgz
 
-# Download rTWAS weights for FUSION
+# Download pwas weights for FUSION
 wget xxx
 
 # Download FUSION package
@@ -431,7 +433,7 @@ tar zxvf 1000G_ref_panel.tgz
 unzip fusion.zip
 
 # Adapt munge_sumstats.py script to ask it to run python2, not &quot;any python available&quot;
-sed -i &#39;s|#!/usr/bin/env python|#!/usr/bin/env python2|g&#39; ~/rtwas/ldsc/munge_sumstats.py 
+sed -i &#39;s|#!/usr/bin/env python|#!/usr/bin/env python2|g&#39; ~/pwas/ldsc/munge_sumstats.py 
 </code></pre>
 </div>
 <div id="explore-and-pre-process-gwas-results" class="section level1">
@@ -455,11 +457,11 @@ head schizophrenia_EUR.tsv
 # Use munge_sumstats.py script from the ldsc pipeline to remove rare variants or other variants that offend typical QC criteria (see https://github.com/bulik/ldsc)
 conda activate ldsc 
 
-~/rtwas/ldsc/munge_sumstats.py --sumstats schizophrenia_EUR.tsv --out schizophrenia.processed --snp ID --a1 A1 --a2 A2 --p PVAL --N-col NEFF --info IMPINFO --chunksize 500000
+~/pwas/ldsc/munge_sumstats.py --sumstats schizophrenia_EUR.tsv --out schizophrenia.processed --snp ID --a1 A1 --a2 A2 --p PVAL --N-col NEFF --info IMPINFO --chunksize 500000
 </code></pre>
 </div>
-<div id="run-the-rtwas" class="section level1">
-<h1>4) Run the rTWAS</h1>
+<div id="run-the-pwas" class="section level1">
+<h1>4) Run the pwas</h1>
 <pre class="bash"><code>conda activate fusion_final
 
 # Running the initial analysis
