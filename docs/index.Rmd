@@ -1,5 +1,5 @@
 ---
-title: "2nd King's-UNICAMP Workshop: <br> GWAS QC and PWAS tutorial"
+title: "GWAS QC and PWAS tutorial"
 author: "by Rodrigo R. R. Duarte (rodrigo.duarte@kcl.ac.uk)"
 date: "2026-06-30"
 output: html_document
@@ -70,6 +70,18 @@ th {
   font-weight: 500;
 }
 </style>
+
+<div id="workshop-logo" style="text-align: center; margin-bottom: 1.5em;"><img src="logo.png" style="max-width: 750px; width: 90%;" alt="Workshop logo"/><br><br>📅 <a href="https://www.dropbox.com/scl/fi/7nffouc9k4kloxhi15q10/2nd-King-s-UNICAMP-Workshop-Agenda.pdf?rlkey=744rqdg3byku35daaw3hk9k8u&dl=0" target="_blank"><strong>Download the workshop agenda</strong></a></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var logo = document.getElementById("workshop-logo");
+  var header = document.getElementById("header");
+  if (header && logo) {
+    header.parentNode.insertBefore(logo, header);
+  }
+});
+</script>
 
 This tutorial will guide you through installing two conda/mamba environments, where you will perform standard quality control of GWAS results and perform a proteome-wide association study (PWAS).
 
