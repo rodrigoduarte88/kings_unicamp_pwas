@@ -85,6 +85,9 @@ document.addEventListener("DOMContentLoaded", function() {
 
 This tutorial will guide you through installing two conda/mamba environments, where you will perform standard quality control of GWAS results and perform a proteome-wide association study (PWAS).
 
+**Target audience:** researchers and students with little or no prior coding experience who want to develop bioinformatics skills — ideally alongside tools like ChatGPT or Google, which are genuinely useful companions for navigating error messages, understanding commands, and troubleshooting. 😉
+
+**What you need:** just your own computer. If you are a Windows User, you will need to have WSL installed to access Ubuntu's Terminal (see [this link](https://learn.microsoft.com/en-us/windows/wsl/install)). If you are MacOS or Linux user, you can just use Terminal.
 
 # 1) Set up environments (`fusion_final` and `ldsc`)
 
@@ -398,7 +401,7 @@ knitr::include_graphics("miami_plot.png")
 ## Conditional analysis
 
 
-When multiple proteins are significant in the same genomic region — as here, with RANGAP1 and NDUFA6 sitting close together on chr22 — it is unclear whether each is an independent signal or both just reflect the same underlying GWAS locus. The **conditional analysis** (`FUSION.post_process.R`) tests each significant protein after statistically conditioning on the others in the locus, helping separate truly independent signals from correlated ones. It also generates locus plots showing the GWAS and PWAS signals together.
+The **conditional analysis** (`FUSION.post_process.R`) is run on the significant proteins from each chromosome to confirm whether their associations are truly independent. RANGAP1 (chr22: ~41.6 Mb) and NDUFA6 (chr22: ~42.5 Mb) are ~840 kb apart and driven by different GWAS SNPs (`rs2179744` and `rs5751204` respectively) — they are in separate loci and their signals are indeed independent, as confirmed by the conditional analysis (both appear in `joint_included`, none in `joint_dropped`). The conditional analysis also generates locus plots for each independent signal, showing the GWAS association alongside the PWAS result and what happens to nearby SNPs after conditioning.
 
 
 ```{bash, eval=F}
@@ -446,7 +449,7 @@ done
 The locus plot for the RANGAP1 region (locus 1) is shown below:
 
 
-```{r loc1-plot, echo=FALSE, out.width="100%", fig.cap="**Figure 2. Locus plot for the RANGAP1 region on chromosome 22.** The figure shows the genetic context (gene positions), the GWAS association signals (−log10 P) across the locus (as dots of different colours in the graph), and the x axis shows gene positions. The green gene (RANGAP1) is the independently significant protein identified by the PWAS. Blue dots show GWAS SNP associations after conditioning on RANGAP1's predicted protein levels — they drop to near zero, indicating that RANGAP1 fully accounts for the GWAS signal at this locus."}
+```{r loc1-plot, echo=FALSE, out.width="100%", fig.cap="**Figure 2. Locus plot for the RANGAP1 region on chromosome 22 (~41.6 Mb).** Gene positions are shown in the upper panel; GWAS association signals (−log10 P) are shown as coloured dots. The green gene (RANGAP1) is the independently significant PWAS signal at this locus. Blue dots show GWAS SNP associations after conditioning on RANGAP1's predicted protein levels — they drop to near zero, suggesting that RANGAP1 fully explains the GWAS signal here. NDUFA6, the other significant protein on chr22, lies ~840 kb away in a separate, independent locus and is not shown in this plot."}
 knitr::include_graphics("loc_1.png")
 ```
 
@@ -456,12 +459,20 @@ knitr::include_graphics("loc_1.png")
 
 # 5) Where to go from here
 
+The PWAS we ran here is a powerful starting point, but several complementary analyses can deepen interpretation of the results.
 
-The PWAS approach we used here is one of several complementary methods for interpreting GWAS results biologically. Other widely used approaches include:
+## Staying within the molecular QTL framework
 
-- **Gene-level association testing**: rather than testing individual SNPs, this collapses GWAS signals to the gene level by aggregating P-values across all SNPs in a gene window. This can increase power to detect genes with no single strongly associated SNP but with consistent, modest effects across many SNPs.
+**Colocalisation** asks a more specific question than PWAS: do the GWAS signal and the protein/expression QTL signal at a given locus actually share the same causal variant, or are they two independent signals that happen to be in the same region due to LD? This is typically tested using tools such as the [`coloc`](https://chr1swallace.github.io/coloc/) R package, which computes posterior probabilities for five scenarios (e.g. no association in either dataset, association in one only, two independent signals, or one shared causal variant). FUSION's conditional analysis already gives a first pass at this, but coloc provides a formal statistical framework for variant-level colocalisation.
 
-- **Gene-set and pathway enrichment analysis**: tests whether the genes implicated by a GWAS are over-represented in known biological pathways, cell types, or tissue-specific gene expression profiles — moving from a list of individual genes to higher-level biological insight (e.g. revealing enrichment in synaptic signalling or immune pathways).
+**TWAS/PWAS fine-mapping with FOCUS** addresses a different problem: when several genes or proteins in the same locus are significant by PWAS (even after conditioning), how do we decide which one is most likely to be the causally relevant gene? [FOCUS](https://github.com/bogdanlab/focus) uses a Bayesian fine-mapping approach to compute posterior inclusion probabilities for each gene/protein, producing a credible set of likely causal genes — analogous to credible sets in SNP-level fine-mapping.
 
+## Broader GWAS annotation and enrichment
 
-Both of these analyses (and many more, including fine-mapping, colocalization, and tissue enrichment) can be performed using [**FUMA**](https://fuma.ctglab.nl/) — a free web platform that takes GWAS summary statistics as input and automates a wide range of downstream analyses. If you would like to explore GWAS results beyond PWAS, FUMA is an excellent next step.
+Beyond the expression-centric approaches above, GWAS results can also be interpreted at a higher biological level:
+
+- **Gene-level association testing** (e.g. via [MAGMA](https://ctg.cncr.nl/software/magma)): aggregates SNP-level P-values across gene windows to identify genes with an overall burden of association, increasing power for genes with many SNPs of modest effect.
+
+- **Gene-set and pathway enrichment** (e.g. MAGMA gene-set analysis): tests whether genes implicated by the GWAS cluster in known biological pathways or cell-type-specific gene expression profiles — moving from individual genes to higher-level biological insight such as enrichment in synaptic signalling or immune pathways.
+
+- **Tissue and cell-type enrichment, eQTL annotation, and gene mapping** can be performed together using [**FUMA**](https://fuma.ctglab.nl/), a free web platform that takes GWAS summary statistics and automates a wide range of downstream annotation steps. Note that FUMA is best suited for these broader annotation tasks — it is not designed for formal colocalisation with expression signatures (use `coloc` or SMR for that) or for TWAS/PWAS fine-mapping (use FOCUS for that).
