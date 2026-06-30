@@ -1,0 +1,153 @@
+---
+title: "TEA-BISCUIT tutorial"
+author: "by Rodrigo R. R. Duarte (rodrigo.duarte@kcl.ac.uk)"
+date: "2023-05-23"
+output: html_document
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1) Set up environments (`fusion_final` and `ldsc`)
+
+## Create `fusion_final` environment
+
+```{bash, eval=F}
+
+# Create an rTWAS folder and enter it
+mkdir -p ~/rtwas 
+cd ~/rtwas
+
+# Download yml file for conda
+wget https://raw.githubusercontent.com/rodrigoduarte88/neuro_rTWAS/main/fusion_final_environment.yml 
+
+# Create conda environment called fusion_final
+conda env create -f fusion_final_environment.yml
+
+# Change name of some libraries for conda
+cd ~/miniconda3/envs/fusion_final/lib 
+mv liblapack.so libRlapack.so 
+mv libblas.so libRblas.so
+
+# Start R and manually install plink2R library. First, activate environment
+conda activate fusion_final
+
+# Then start R
+R
+
+# Then install plink2R
+devtools::install_github("carbocation/plink2R/plink2R", ref="carbocation-permit-r361")
+
+# install mystical libraries
+install.packages(c("optparse", "doMC"))
+
+# quit R
+quit("no")
+```
+
+## Create `ldsc` environment
+
+```{bash, eval=F}
+cd ~/rtwas
+
+wget https://www.dropbox.com/s/9cvovht5hbp5mho/ldsc_environment.yml
+
+conda env create -f ldsc_environment.yml
+
+```
+
+# 2) Download required files and decompress
+
+```{bash, eval=F}
+
+# Download GWAS summary statistics from the PGC website (European subset, schizophrenia)
+cd ~/rtwas
+wget https://figshare.com/ndownloader/files/34517828 -O schizophrenia_EUR.tsv.gz
+
+# Download reference panel (1000 Genomes, European subset)
+wget https://www.dropbox.com/s/oxt4sbryxxjpg1d/1000G_ref_panel.tgz
+
+# Download rTWAS weights for FUSION
+wget xxx
+
+# Download FUSION package
+wget https://github.com/gusevlab/fusion_twas/archive/master.zip -O fusion.zip
+
+# Download ldsc software
+git clone https://github.com/bulik/ldsc.git 
+
+# Decompress files
+gunzip schizophrenia_EUR.tsv.gz 
+tar zxvf FUSION_weights.tgz 
+tar zxvf 1000G_ref_panel.tgz 
+unzip fusion.zip
+
+# Adapt munge_sumstats.py script to ask it to run python2, not "any python available"
+sed -i 's|#!/usr/bin/env python|#!/usr/bin/env python2|g' ~/rtwas/ldsc/munge_sumstats.py 
+
+```
+
+# 3) Explore and pre-process GWAS results
+
+```{bash, eval=F}
+
+# Explore first few lines
+head schizophrenia_EUR.tsv 
+
+# Explore first 100 lines
+head -100 schizophrenia_EUR.tsv 
+
+# Explore last few lines
+tail schizophrenia_EUR.tsv
+
+# Remove all lines starting with hashtag (#)
+sed -i '/^#/ d' schizophrenia_EUR.tsv
+
+# Check file again, to see how it looks 
+head schizophrenia_EUR.tsv 
+
+# Use munge_sumstats.py script from the ldsc pipeline to remove rare variants or other variants that offend typical QC criteria (see https://github.com/bulik/ldsc)
+conda activate ldsc 
+
+~/rtwas/ldsc/munge_sumstats.py --sumstats schizophrenia_EUR.tsv --out schizophrenia.processed --snp ID --a1 A1 --a2 A2 --p PVAL --N-col NEFF --info IMPINFO --chunksize 500000
+
+```
+
+# 4) Run the rTWAS
+
+```{bash, eval=F}
+conda activate fusion_final
+
+# Running the initial analysis
+Rscript --verbose --no-save fusion_twas-master/FUSION.assoc_test.R \
+--sumstats schizophrenia.processed.sumstats.gz \
+--weights wrapped/CMC.pos \
+--weights_dir wrapped \
+--ref_ld_chr LDREF_harmonized/1000G.EUR. \
+--chr 20 \
+--out schizophrenia.chr20.dat
+
+# How many features are expressed on chromosome 20?
+wc -l schizophrenia.chr20.dat # 177 - header = 176 expression features
+
+# Extract Bonferroni significant features.
+cat schizophrenia.chr20.dat | awk 'NR == 1 || $NF < 0.05/176' > schizophrenia.chr20.dat.Sig
+
+# Run the conditional analysis
+Rscript fusion_twas-master/FUSION.post_process.R \
+--input schizophrenia.chr20.dat.Sig \
+--sumstats  schizophrenia.processed.sumstats.gz \
+--ref_ld_chr LDREF_harmonized/1000G.EUR. \
+--out schizophrenia.chr20.dat.Sig.PostProc.dat \
+--chr 20 \
+--save_loci \
+--plot \
+--locus_win 100000 
+
+```
+
+#### Analyse schizophrenia.chr22.PostProc.dat, other resulting files, and plots!
