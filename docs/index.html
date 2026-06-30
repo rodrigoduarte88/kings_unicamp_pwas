@@ -360,12 +360,48 @@ PWAS tutorial</h1>
 
 <p>This tutorial will guide you through installing two conda/mamba
 environments, where you will perform standard quality control of GWAS
-results and perform a proteome-wide association study (PWAS).</p>
-<div id="set-up-environments-fusion_final-and-ldsc" class="section level1">
-<h1>1) Set up environments (<code>fusion_final</code> and
-<code>ldsc</code>)</h1>
+results, perform a proteome-wide association study (PWAS), and analyse
+biological processes underlying the GWAS results on a website called
+FUMA.</p>
+<div id="set-up-environments-for-processing-gwas-files-and-performing-pwas-fusion_final-and-ldsc" class="section level1">
+<h1>1) Set up environments for processing GWAS files and performing PWAS
+(<code>fusion_final</code> and <code>ldsc</code>)</h1>
 <div id="create-fusion_final-environment" class="section level2">
 <h2>Create <code>fusion_final</code> environment</h2>
+<p>FUSION is a statistical genetics tool that lets you go one step
+beyond a standard GWAS. A GWAS tells you that certain genetic variants
+(SNPs) are statistically associated with a trait or disease, but most of
+these SNPs sit in non-coding regions of the genome, so it is often
+unclear <em>which</em> gene, or <em>which</em> protein, they are
+actually affecting, or how. FUSION addresses this gap by using
+pre-computed “weights” — essentially a statistical recipe, built from a
+reference dataset, describing how a person’s genotype at a set of SNPs
+predicts the expression level of a gene, or the abundance of a protein,
+in a particular tissue (e.g. blood, brain, or — in this tutorial — the
+dorsolateral prefrontal cortex from the ROSMAP project - see <a href="https://www.synapse.org/Synapse:syn23245237" class="uri">https://www.synapse.org/Synapse:syn23245237</a>).</p>
+<p>By combining these weights with your GWAS summary statistics, FUSION
+statistically “imputes” (i.e. predicts) how each gene’s or protein’s
+expression/abundance would relate to disease risk, without you needing
+to directly measure gene expression or protein levels in your own GWAS
+cohort. This approach is called a transcriptome-wide association study
+(TWAS) when applied to gene expression, or a proteome-wide association
+study (PWAS) when applied to protein levels — hence the name of this
+tutorial. The output is a list of genes or proteins whose
+genetically-predicted levels are positively or negatively associated
+with the disease or trait in your GWAS, which gives you a much more
+direct, biologically interpretable starting point (e.g. candidate
+genes/proteins for follow-up experiments, or potential drug targets)
+than the raw list of significant SNPs alone from the GWAS.</p>
+<p>FUSION depends on a fairly specific, and somewhat old, combination of
+R, Python and C/C++ libraries, which can clash with software you may
+already have installed on your computer. To avoid this, we will install
+everything inside an isolated software environment, managed by
+<code>conda</code>/<code>mamba</code>, called <code>fusion_final</code>.
+Think of this environment as a self-contained “sandbox”: all the exact
+package versions FUSION needs are installed together in their own little
+space, completely separate from anything else on your machine, so they
+can’t interfere with (or be broken by) other software, and can be easily
+and cleanly removed later if needed.</p>
 <pre class="bash"><code>
 # Create an pwas folder and enter it
 mkdir -p ~/pwas 
@@ -375,7 +411,7 @@ cd ~/pwas
 wget https://raw.githubusercontent.com/rodrigoduarte88/kings_unicamp_pwas/refs/heads/main/fusion_final_environment.yml
 
 # Create conda environment called fusion_final
-mamba env create -f fusion_final_environment.yml
+mamba env create -f fusion_final_environment.yml -y
 
 # Start environment. Note: conda and mamba are sister commands, but I typically just use mamba for installing new commands, and conda for activating them.
 conda activate fusion_final
@@ -399,16 +435,74 @@ quit(&quot;no&quot;)</code></pre>
 </div>
 <div id="create-ldsc-environment" class="section level2">
 <h2>Create <code>ldsc</code> environment</h2>
+<p>LDSC (LD Score Regression) is a software suite originally developed
+to estimate SNP-based heritability and genetic correlations from GWAS
+summary statistics, by making use of linkage disequilibrium (LD) — the
+tendency of nearby SNPs on a chromosome to be inherited together, rather
+than independently. In this tutorial, we are not using LDSC’s
+heritability analyses directly; instead, we only need one of its
+companion scripts, <code>munge_sumstats.py</code>, as a quality-control
+and reformatting tool.</p>
+<p>GWAS summary statistics files downloaded from different consortia or
+websites can vary considerably in their column names, file formats, and
+the types of genetic variants they include (for example, some files
+contain very rare variants, poorly imputed SNPs, or “strand-ambiguous”
+SNPs whose alleles cannot be unambiguously matched across datasets — all
+of which can cause problems in downstream analyses if not removed).
+<code>munge_sumstats.py</code> standardises all of this for us: it
+renames columns into a consistent format, filters out problematic SNPs,
+and outputs a clean, “munged” version of the GWAS summary statistics
+that FUSION can reliably read in a later step.</p>
+<p>Because LDSC was written for an older Python ecosystem, it has its
+own set of software dependencies that would conflict with those required
+by FUSION. We therefore install it in its own separate, isolated
+<code>conda</code>/<code>mamba</code> environment, called
+<code>ldsc</code>, for the same reasons explained above for
+<code>fusion_final</code>.</p>
 <pre class="bash"><code>cd ~/pwas
 
-wget https://raw.githubusercontent.com/rodrigoduarte88/kings_unicamp_pwas/refs/heads/main/ldsc_environment.yml
+git clone -b ldsc39 https://github.com/CBIIT/ldsc.git
+cd ldsc
+mamba create --file environment3.yml 
+conda activate ldsc
 
-conda env create -f ldsc_environment.yml
+# Test if ldsc is working. Should print a bunch of options.
+./munge_sumstats.py --help
 </code></pre>
 </div>
 </div>
 <div id="download-required-files-and-decompress" class="section level1">
 <h1>2) Download required files and decompress</h1>
+<p>To run a PWAS, FUSION needs three different types of input file, each
+providing a different piece of the puzzle:</p>
+<ul>
+<li><p><strong>GWAS summary statistics</strong>: the output of a
+genome-wide association study, summarising, for each SNP tested, how
+strongly it is statistically associated with the trait or disease of
+interest (here, schizophrenia). For each SNP this typically includes its
+effect size, p-value, the sample size it was tested in, and the alleles
+involved. This is the dataset we want to “explain” biologically —
+i.e. ask which genes or proteins the genetic risk captured in this GWAS
+might be acting through.</p></li>
+<li><p><strong>Reference panel</strong>: a separate dataset of real,
+individual-level genotypes (here, from the 1000 Genomes Project,
+European-ancestry subset) used to model the patterns of linkage
+disequilibrium (LD) between nearby SNPs. GWAS summary statistics alone
+only tell you about one SNP at a time, but neighbouring SNPs are often
+correlated with each other. FUSION needs the reference panel to properly
+account for this correlation structure when combining SNP weights with
+the GWAS results.</p></li>
+<li><p><strong>SNP weights</strong>: pre-computed prediction models (one
+per gene/protein, sometimes per tissue) that describe how genotypes at
+nearby SNPs predict the expression level of a gene, or the abundance of
+a protein. These weights are built in advance from a separate reference
+dataset where both genotypes <em>and</em> gene expression/protein levels
+were directly measured in the same individuals. This is the key
+ingredient that lets FUSION estimate, indirectly, how
+genetically-predicted gene/protein levels relate to disease risk in your
+own GWAS, without you ever needing to directly measure gene expression
+or protein abundance in the GWAS samples yourself.</p></li>
+</ul>
 <pre class="bash"><code>
 # Download GWAS summary statistics from the PGC website (European subset, schizophrenia)
 cd ~/pwas
