@@ -1,7 +1,7 @@
 ---
-title: "TEA-BISCUIT tutorial"
+title: "2nd King's-UNICAMP Workshop: GWAS QC and PWAS tutorial"
 author: "by Rodrigo R. R. Duarte (rodrigo.duarte@kcl.ac.uk)"
-date: "2023-05-23"
+date: "2026-06-30"
 output: html_document
 editor_options: 
   markdown: 
@@ -11,6 +11,8 @@ editor_options:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+The thing is....
 
 # 1) Set up environments (`fusion_final` and `ldsc`)
 
