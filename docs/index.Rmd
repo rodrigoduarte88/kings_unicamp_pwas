@@ -190,6 +190,18 @@ wget "https://www.dropbox.com/scl/fi/scy0xb4i781h3e3u9hc12/1000G_ref_panel.tgz?r
 tar zxvf 1000G_ref_panel.tgz
 
 # Download and decompress PWAS SNP weights (ROSMAP dorsolateral prefrontal cortex)
+# This is arguably the most interesting choice in the entire pipeline — alongside the GWAS itself.
+# The SNP weights define WHICH tissue or brain region you are asking about, and swapping them
+# out is all it takes to run the same analysis in a completely different biological context.
+# Want to ask which proteins in the cerebellum, or the hippocampus, or blood, are associated
+# with your GWAS? Just use a different set of weights. This versatility is what makes
+# FUSION/TWAS-style analyses so powerful and widely applicable.
+#
+# Here we use proteomics weights from ROSMAP (dorsolateral prefrontal cortex, n=376).
+# The FUSION website (http://gusevlab.org/projects/fusion/) hosts many additional weight
+# sets from a wide range of brain regions and tissues — note that most of those are
+# transcriptomics (RNA expression), not proteomics, so they would give you a TWAS rather
+# than a PWAS. The biology you can interrogate depends entirely on the weights you choose.
 mkdir -p ~/pwas/weights && cd ~/pwas/weights
 wget "https://www.dropbox.com/scl/fi/4ziqswrkb7z0g77tir3qy/ROSMAP.n376.fusion.WEIGHTS-v2.zip?rlkey=q1l4q876i2hpdzoaexuxohcgy&dl=1" -O ROSMAP.n376.fusion.WEIGHTS-v2.zip
 conda activate fusion_final
@@ -288,34 +300,37 @@ Writing summary statistics for 5392569 SNPs (5392569 with nonmissing beta) to sc
 
 Pay attention to this number — you want **at least ~1 million SNPs** remaining. Far fewer may indicate wrong column names, a genome build mismatch, or an overly strict quality filter. Check the log for warnings if something seems off.
 
+---
+
+**❓ Question: what does the processed file actually look like?**
+
+Since the output file is gzip-compressed (`.gz`), you can't open it directly with `head`. Instead, use `zcat`, which decompresses a `.gz` file and streams its contents to the terminal — you can then pipe that output into `head` to see just the first few lines:
+
+```{bash, eval=F}
+zcat schizophrenia.processed.sumstats.gz | head
+```
+
+You should see something like this:
+
+```
+SNP         A1  A2  Z       N
+rs62513865  C   T   0.699   58749.130
+rs79643588  G   A  -0.582   58749.130
+rs17396518  T   G  -0.235   58749.130
+rs983166    A   C   0.567   58749.130
+rs28842593  T   C  -0.320   58749.130
+```
+
+The munged file is much simpler than the original: just five columns (`SNP`, `A1`, `A2`, `Z`, `N`). `munge_sumstats.py` standardises GWAS summary statistics into a minimal format that FUSION and LDSC expect. The main transformation is that `BETA` and `SE` are combined into a single **Z-score** (Z = BETA / SE), which captures both direction and significance in one number. Everything else — P-values, allele frequencies, imputation quality — has already served its purpose during QC and is dropped.
+
+> 💡 **A note on file formats:** different programs and websites expect GWAS summary statistics in different formats, often with specific column names, column ordering, or required fields. FUSION expects exactly the format produced here (`SNP`, `A1`, `A2`, `Z`, `N`). But if you were feeding these results into another tool — for example, FUMA, which requires a P-value column; or coloc, which needs effect sizes and standard errors — you would need to go back to the original cleaned file (`schizophrenia_EUR.tsv`) and reformat or rename columns accordingly. Getting comfortable with inspecting and reformatting summary statistics files using tools like `head`, `awk`, and `sed` is one of the most transferable practical skills in statistical genetics.
+
 
 # 4) Run the PWAS
 
+We now have everything in place: cleaned GWAS summary statistics, a reference panel, and SNP weights. FUSION will go through each protein in the weights panel, use the SNP weights to predict its abundance based on genotype, and test whether that predicted abundance associates with schizophrenia risk — one chromosome at a time.
 
-FUSION analyses one chromosome at a time. For a complete genome-wide PWAS you would loop over all 22 autosomes using a **`for` loop** — a bash construct that repeats a command for each value in a list. In `for i in {1..22}`, `i` takes each value from 1 to 22, and `$i` inside the loop is replaced by the current value automatically.
-
-
-**→ Skip this block during the tutorial** — it takes ~20–30 minutes. You are welcome to run it to get full genome-wide results; it just takes time.
-
-
-```{bash, eval=F}
-cd ~/pwas
-conda activate fusion_final
-
-for i in {1..22}
-do
-  Rscript --verbose --no-save fusion_twas-master/FUSION.assoc_test.R \
-  --sumstats gwas/schizophrenia.processed.sumstats.gz \
-  --weights weights/ROSMAP.n376.fusion.WEIGHTSv2/train_weights.pos \
-  --weights_dir weights/ROSMAP.n376.fusion.WEIGHTSv2/ \
-  --ref_ld_chr ref_pop/LDREF_harmonized/1000G.EUR. \
-  --chr $i \
-  --out schizophrenia.chr$i.dat
-done
-```
-
-
-For the tutorial, we'll only run **chromosome 22**.
+For the tutorial, we'll run **chromosome 22** only (one of the smaller autosomes, so it completes quickly).
 
 
 ```{bash, eval=F}
@@ -372,14 +387,29 @@ A **positive `TWAS.Z`** means higher genetically-predicted protein levels associ
 - **NDUFA6** (mitochondrial complex I subunit): `TWAS.Z = +4.82`, `p = 1.45×10⁻⁶`. Top GWAS SNP `rs5751204` (Z = −6.91) is also the best eQTL for this protein (R² = 0.104), suggesting a direct link between the GWAS signal and protein regulation.
 
 
-## Miami plot
+## Running the full analysis across chromosomes and plotting a Miami plot
 
+**→ Skip this section if you only ran chromosome 22 during the tutorial.**
 
-**→ Requires full genome-wide PWAS (all 22 chromosomes). Skip if you only ran chromosome 22.**
+FUSION analyses one chromosome at a time. For a complete genome-wide PWAS you would loop over all 22 autosomes using a **`for` loop** — a bash construct that repeats a command for each value in a list. In `for i in {1..22}`, `i` takes each value from 1 to 22, and `$i` inside the loop is replaced by the current value automatically. This takes ~20–30 minutes but you are welcome to run it if you'd like the full results.
 
+```{bash, eval=F}
+cd ~/pwas
+conda activate fusion_final
 
-A **Miami plot** shows the PWAS Z-score for all features across the genome, arranged by chromosomal position. Unlike a standard Manhattan plot (−log10 P), it preserves the **direction** of each association — proteins above the x-axis associate with increased risk, those below with decreased risk. Significant hits are highlighted in red and labelled by gene name.
+for i in {1..22}
+do
+  Rscript --verbose --no-save fusion_twas-master/FUSION.assoc_test.R \
+  --sumstats gwas/schizophrenia.processed.sumstats.gz \
+  --weights weights/ROSMAP.n376.fusion.WEIGHTSv2/train_weights.pos \
+  --weights_dir weights/ROSMAP.n376.fusion.WEIGHTSv2/ \
+  --ref_ld_chr ref_pop/LDREF_harmonized/1000G.EUR. \
+  --chr $i \
+  --out schizophrenia.chr$i.dat
+done
+```
 
+Once all chromosomes are done, a **Miami plot** lets you visualise the full PWAS at a glance — showing the PWAS Z-score for every feature across the genome, arranged by chromosomal position. Unlike a standard Manhattan plot (−log10 P), it preserves the **direction** of each association: proteins above the x-axis associate with increased risk, those below with decreased risk. Significant hits are highlighted in red and labelled by gene name.
 
 ```{bash, eval=F}
 cd ~/pwas
